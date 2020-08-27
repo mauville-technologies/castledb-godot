@@ -1,4 +1,4 @@
-enum { CDB_ID, CDB_STRING, CDB_BOOL, CDB_INT, CDB_FLOAT, CDB_ENUM, CDB_COLOR, CDB_FILE, CDB_TILE, CDB_NIL }
+enum { CDB_ID, CDB_STRING, CDB_BOOL, CDB_INT, CDB_FLOAT, CDB_ENUM, CDB_LIST, CDB_COLOR, CDB_FILE, CDB_TILE, CDB_DYNAMIC, CDB_NIL }
 
 static func get_column_type(column):
 	var type: String = str(column["typeStr"].to_int())
@@ -15,12 +15,16 @@ static func get_column_type(column):
 			return CDB_FLOAT
 		"5":
 			return CDB_ENUM
+		"8":
+			return CDB_LIST
 		"11":
 			return CDB_COLOR
 		"13":
 			return CDB_FILE
 		"14":
 			return CDB_TILE
+		"16":
+			return CDB_DYNAMIC
 		_:
 			return CDB_NIL
 
@@ -40,7 +44,7 @@ static func gen_column_keys(name:String, columns:Array, lines:Array, outKeys:Arr
 		elif get_column_type(column) == CDB_ENUM:
 			code += tab + "enum %s {" % column["name"].capitalize().strip_edges().replacen(" ", "")
 			var type = column["typeStr"].split(":", true, 1)
-			var possible_value = type.back().split(",")
+			var possible_value = type[1].split(",")
 			for i in possible_value.size():
 				if i > 0:
 					code += ", "
@@ -78,6 +82,10 @@ static func gen_column_data(path:String, name:String, columns:Array, lines:Array
 				code += tab + "\t" + "var %s := 0" % column["name"] + "\n"
 				params.push_back(column["name"])
 				types.push_back(type)
+			CDB_LIST:
+				code += tab + "\t" + "var %s := []" % column["name"] + "\n"
+				params.push_back(column["name"])
+				types.push_back(type)
 			CDB_FLOAT:
 				code += tab + "\t" + "var %s := 0.0" % column["name"] + "\n"
 				params.push_back(column["name"])
@@ -90,8 +98,21 @@ static func gen_column_data(path:String, name:String, columns:Array, lines:Array
 				code += tab + "\t" + "var %s := CastleDB.Tile.new()" % column["name"] + "\n"
 				params.push_back(column["name"])
 				types.push_back(type)
+			CDB_DYNAMIC:
+				code += tab + "\t" + "var %s := {}" % column["name"] + "\n"
+				params.push_back(column["name"])
+				types.push_back(type)
 			_:
 				pass
+
+	# As dictionary function
+	code += tab + "\t\n"
+	code += tab + "\t" + "func as_dictionary() -> Dictionary:" + "\n"
+	code += tab +"\t\t" + "return {" + "\n"
+	for param in params:
+		code += tab +"\t\t\t" + "\"%s\": %s," % [param, param] + "\n"
+	
+	code += tab +"\t\t" + "}" + "\n"
 
 	# Init func
 	code += tab + "\t\n"
@@ -107,12 +128,16 @@ static func gen_column_data(path:String, name:String, columns:Array, lines:Array
 				code += "%s = false" % params[i]
 			CDB_INT, CDB_ENUM:
 				code += "%s = 0" % params[i]
+			CDB_LIST:
+				code += "%s = []" % params[i]
 			CDB_FLOAT:
 				code += "%s = 0.0" % params[i]
 			CDB_COLOR:
 				code += "%s = Color()" % params[i]
 			CDB_TILE:
 				code += "%s = CastleDB.Tile.new()" % params[i]
+			CDB_DYNAMIC:
+				code += "%s = {}" % params[i]
 			_:
 				code += "%s = \"\"" % params[i]
 	code += "):" + "\n"
@@ -138,17 +163,21 @@ static func gen_column_data(path:String, name:String, columns:Array, lines:Array
 							code += "%s" % "true" if line[param] else "false"
 						CDB_INT, CDB_ENUM:
 							code += "%d" % line[param]
+						CDB_LIST:
+							code += "%s" % JSON.print(line[param])
 						CDB_FLOAT:
 							code += "%f" % line[param]
 						CDB_STRING, CDB_FILE:
 							code += "\"%s\"" % line[param]
 						CDB_COLOR:
-							code += "Color(%d)" % line[param]
+							code += "Color(\"%x\")" % line[param] if line[param] != 0 else "Color(\"000000\")"
 						CDB_TILE:
 							var img = Image.new()
 							img.load(path + "/" + line[param]["file"])
 							var stride = int(img.get_width() / line[param]["size"])
 							code += "CastleDB.Tile.new(\"%s\", %s, %s, %s, %s)" % [ line[param]["file"], line[param]["size"], line[param]["x"], line[param]["y"], stride ]
+						CDB_DYNAMIC:
+							code += JSON.print(line[param])
 						_:
 							code += "\"%s\"" % line[param]
 			code += ")"

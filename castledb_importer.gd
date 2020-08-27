@@ -1,12 +1,12 @@
 tool
 extends EditorImportPlugin
 
-const Utils = preload("res://addons/thejustinwalsh.castledb/castledb_utils.gd")
+const Utils = preload("res://addons/castledb-godot/castledb_utils.gd")
 
 enum Presets { PRESET_DEFAULT }
 
 func get_importer_name():
-	return "castledb.importer"
+	return "castledb-godot.importer"
 
 func get_visible_name():
 	return "CastleDB"
@@ -43,6 +43,9 @@ func get_import_options(preset):
 func get_option_visibility(option, options):
 	return true
 
+func get_import_order():
+	return 9999
+	
 func import(source_file, save_path, options, r_platform_variants, r_gen_files):
 	var file = File.new()
 	var err = file.open(source_file, File.READ)
@@ -51,6 +54,7 @@ func import(source_file, save_path, options, r_platform_variants, r_gen_files):
 
 	var json = file.get_as_text()
 	file.close();
+	print('cool')
 	var json_result = JSON.parse(json)
 	if json_result.error != OK:
 		return json_result.error
@@ -61,7 +65,7 @@ func import(source_file, save_path, options, r_platform_variants, r_gen_files):
 	# Script Header
 	var code = "extends Node" + "\n"
 	code += "\n"
-	code += "const CastleDB = preload(\"res://addons/thejustinwalsh.castledb/castledb_types.gd\")" + "\n"
+	code += "var CastleDB = load(\"res://addons/castledb/castledb_types.gd\")" + "\n"
 	code += "\n"
 
 	# Script child class sheets (namespace)
@@ -85,10 +89,13 @@ func import(source_file, save_path, options, r_platform_variants, r_gen_files):
 
 		code +=  "var %s := %s.new()" % [name.to_lower(), name] + "\n"
 
-	var main_script = GDScript.new();
-	main_script.set_source_code(code)
 
-	return ResourceSaver.save("%s.%s" % [save_path, get_save_extension()], main_script)
+	var main_script = GDScript.new();
+	
+	main_script.set_source_code(code)
+	
+	ResourceSaver.save("%s.%s" % [save_path, get_save_extension()], main_script)
+	return OK
 
 
 
